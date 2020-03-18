@@ -50,7 +50,7 @@ class vfs7552:
     # Because we are looking at the images, I think std makes more sense.
     # It is located in 3 lines of code.
 
-    finger_detection_threshold = 300
+    finger_detection_threshold = 0.15
 
     def __init__(self, *, idVendor=0x138A, idProduct=0x0091):
         self.skip_optional = False
@@ -170,6 +170,7 @@ class vfs7552:
         logging.info('')
         previous_log = logging.getLogger()
         previous_level = previous_log.level
+        last_var = -1
         while True:
             if N_tries is not None:
                 if N_tries == 0:
@@ -186,8 +187,13 @@ class vfs7552:
                 logging.getLogger().setLevel(previous_level)
                 logging.debug("Last received:\n" + array_to_str(response))
                 img = self._read_in_image()
-                if (actual_finger and
-                        img.var() < self.finger_detection_threshold):
+                if last_var == -1:
+                    last_var = img.var()
+                    continue
+                elif (actual_finger and
+                        # img.var() < self.finger_detection_threshold):
+                        img.var() < (self.finger_detection_threshold * last_var + last_var) ):
+                    last_var = img.var()
                     continue
                 else:
                     logging.info(f"Return image var={img.var()}")
@@ -197,6 +203,7 @@ class vfs7552:
         logging.info('')
         previous_log = logging.getLogger()
         previous_level = previous_log.level
+        first_var = -1
         while True:
             response = self._ask(is_image_ready)
 
@@ -207,12 +214,16 @@ class vfs7552:
 
             if response[:2] == image_ready_response:
                 img = self._read_in_image()
+                delta = first_var - (self.finger_detection_threshold * first_var)
 
                 # Some heuristic I found that detected that the finger
                 # was taken off
-                if img.var() < self.finger_detection_threshold:
+                # if img.var() < self.finger_detection_threshold:
+                if img.var() < delta:
                     logging.info(f'Stopped because var={img.var()}')
                     break
+                if first_var == -1:
+                    first_var = img.var()
             elif response[:2] == image_error_response:
                 logging.info('Stopped because received image error response')
                 break
